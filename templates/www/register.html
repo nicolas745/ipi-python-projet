@@ -1,0 +1,10 @@
+<form method="post">
+    <input name="{{ env['USER'] }}">
+    <input name="{{ env['PASSWD'] }}" type="password">
+    <input value="register" name="submit" type="submit">
+</form>
+{% if message[env['MESSAGEREGISTER']] %}
+<strong>
+    {{ message[env['MESSAGEREGISTER']] }}
+</strong>
+{% endif %}

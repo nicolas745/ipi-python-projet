@@ -1,0 +1,16 @@
+{% if session %}
+<header>
+</header>
+{% else %}
+<header>
+    <a href="/{{ env['LOGIN'] }}">
+       Login 
+    </a>
+    <a href="/{{ env['REGISTER'] }}">
+        register
+    </a>
+    <a>
+        wiki
+    </a>
+</header>
+{% endif %}
