@@ -1,4 +1,4 @@
-#!.venv/bin/python3
+#!/usr/bin/env python
 from flask import Flask, render_template , request, session, g , redirect
 import html
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -15,6 +15,7 @@ class env(Enum):
     FORUMTIME="time"
     PASSWD="passwd"
     INDEX="index.html"
+    LOGOUT="logout.html"
     WIKI="wiki.html"
     REGISTER="register.html"
     OKREGISTER = "le user {} a été enrgistré"
@@ -139,6 +140,10 @@ class UnauthPageHandler(web):
             return self.render(**g.varible), 404
 class authHandler(web):
     def __init__(self, app: Flask) -> None: 
+        @app.get("/"+env.LOGOUT.value)
+        def logout():
+            session.clear()
+            return redirect("/")
         @app.get("/membre")
         def membre():
             g.varible['page'] = env.LOGIN.value
