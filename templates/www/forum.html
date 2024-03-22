@@ -1,0 +1,23 @@
+<table>
+    <tr>
+        <th>
+            timer
+        </th>
+        <th>
+            user
+        </th>
+        <th>
+            message
+        </th>
+    </tr>
+    {% for message in forum %}
+    <tr>
+        <td>{{ message[env['FORUMTIME']] }}</td>
+        <td>{{ message[env['USER']] }}</td>
+        <td>{{ message[env['FORUMMESSAGE']] }}</td>
+    </tr>
+    {% endfor %}
+</table>
+{% if session %}
+    {% include 'www/message.html' %}
+{% endif %}

@@ -5,6 +5,7 @@ from werkzeug.security import check_password_hash, generate_password_hash
 import sqlite3
 from enum import Enum
 import os
+import time
 import inspect
 from threading import local
 class env(Enum):
@@ -14,7 +15,9 @@ class env(Enum):
     FORUMIDUSER="id_pseudo"
     FORUMTIME="time"
     PASSWD="passwd"
+    FORUM = "forum.html"
     INDEX="index.html"
+    FORUMS="forums.html"
     ACCOUNT="account.html"
     LOGOUT="logout.html"
     WIKI="wiki.html"
@@ -24,59 +27,73 @@ class env(Enum):
     LOGIN="login.html"
     ERROR404 ="404.html"
 class sql:
-    def __init__(self, namefile: str) -> None:
-        self._local = local()
-        self._local.conn = sqlite3.connect(namefile)
-        cursor = self._local.conn.cursor()
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS user (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                {} TEXT,
-                {} TEXT
-            );
-        '''.format(env.PASSWD.value,env.USER.value))
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS forum (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                {} TEXT,
-                {} TEXT,
-                {} INT,
-                {} INT,
-                FOREIGN KEY ({}) REFERENCES user(id)
-            );
-        '''.format(env.FORUMTITRE.value,env.FORUMMESSAGE.value,env.FORUMIDUSER.value,env.FORUMTIME.value,env.FORUMIDUSER.value))
+    def __init__(self, namefile: str="database.db") -> None:
+        self.namefile = namefile
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS user ( id INTEGER PRIMARY KEY AUTOINCREMENT, {env.PASSWD.value} TEXT, {env.USER.value} TEXT);")
+        cursor.execute(f"CREATE TABLE IF NOT EXISTS forum ( id INTEGER PRIMARY KEY AUTOINCREMENT, {env.FORUMTITRE.value} TEXT, {env.FORUMMESSAGE.value} TEXT, {env.FORUMIDUSER.value} INT, {env.FORUMTIME.value} INT, FOREIGN KEY ({env.FORUMIDUSER.value}) REFERENCES user(id) );")
+        con.commit()
         cursor.close()
-        self._local.conn.commit()
+        con.close()
+    def listforum(self,per_page,offset):
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f'SELECT DISTINCT {env.FORUMTITRE.value} FROM forum ORDER BY id DESC LIMIT ? OFFSET ?', (per_page,offset))
+        forum = cursor.fetchall()
+        cursor.close()
+        con.close()
+        return forum
     def _get_conn(self):
-        if not hasattr(self._local, 'conn') or not self._local.conn:
-            self._local.conn = sqlite3.connect("database.db")
-            self._local.conn.row_factory = sqlite3.Row
-        return self._local.conn
-
-    def getpasswd(self, user) -> bool:
-        cursor = self._get_conn().cursor()
-        cursor.execute(f"""
-                SELECT * 
-                FROM user 
-                WHERE `{env.USER.value}`=?;
-            """,(user,))
+        conn = sqlite3.connect(self.namefile)
+        conn.row_factory = sqlite3.Row
+        return conn
+    def getiduser(self,user):
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f" SELECT id  FROM user  WHERE `{env.USER.value}`=?;",(user,))
         res=cursor.fetchone()
         cursor.close()
+        con.close()
+        if(not res):
+            return None
+        return  res["id"]
+    def getpasswd(self, user) -> bool:
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f" SELECT {env.PASSWD.value}  FROM user  WHERE `{env.USER.value}`=?;",(user,))
+        res=cursor.fetchone()
+        cursor.close()
+        con.close()
         if(not res):
             return None
         return  res[env.PASSWD.value]
-
-    def adduser(self, user, passwd):
-        cursor = self._get_conn().cursor()
-        cursor.execute(f"""
-            INSERT INTO user (`{env.USER.value}`, `{env.PASSWD.value}`) 
-            VALUES (?, ?)
-        """, (user, passwd))
-        self._get_conn().commit()
+    def addforum(self,title,message):
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f"INSERT INTO forum ({env.FORUMTITRE.value}, {env.FORUMMESSAGE.value}, {env.FORUMIDUSER.value}, {env.FORUMTIME.value}) VALUES (?, ?, ?, ?)",(title, message, self.getiduser(session.get(env.USER.value)), time.time()))
+        con.commit()
         cursor.close()
-
+        con.close()
+    def adduser(self, user, passwd):
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f"INSERT INTO user (`{env.USER.value}`, `{env.PASSWD.value}`) VALUES (?, ?)", (user, passwd))
+        con.commit()
+        cursor.close()
+        con.close()
+    def listmessage(self,title,per_page,offset):
+        con = self._get_conn()
+        cursor = con.cursor()
+        cursor.execute(f'SELECT forum.*, user.{env.USER.value}  FROM forum JOIN user ON forum.{env.FORUMIDUSER.value} = user.id WHERE {env.FORUMTITRE.value}=? ORDER BY id DESC LIMIT ? OFFSET ?', (title,per_page,offset))
+        message = cursor.fetchall()
+        cursor.close()
+        con.close()
+        return message
+        
 class web():
     def __init__(self,app:Flask) -> None:
+        self.sql = sql()
         @app.before_request
         def before_request():
             return self.before_request()
@@ -93,20 +110,12 @@ class web():
 class UnauthPageHandler(web):
     def __init__(self,app:Flask) -> None:
         super().__init__(app)
-        self.sql = sql("database.db")
         @app.get("/")
         def index():
             if session.get(env.USER.value):
                 return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.INDEX.value
             return self.render(**g.varible)
-        @app.post("/")
-        def connect():
-            if session.get(env.USER.value):
-                return redirect("/"+env.ACCOUNT.value)
-            g.varible['page'] = env.INDEX.value
-            return self.render(**g.varible)
-        
         @app.get("/"+env.REGISTER.value)
         def getregister():
             if session.get(env.USER.value):
@@ -146,8 +155,24 @@ class UnauthPageHandler(web):
                     passwd_hash=self.sql.getpasswd(user)
                     if(passwd_hash):
                         if check_password_hash(passwd_hash, passwd):
-                            session[env.USER.value] = user
-                            return redirect("/membre")
+                            session[env.USER.value]= user
+                            return redirect("/"+env.ACCOUNT.value)
+            return self.render(**g.varible)
+        @app.get("/forum/<title>/")
+        def getforum(title):
+            page = request.args.get('page', default=1, type=int)
+            per_page = 10
+            offset = (page - 1) * per_page
+            g.varible['page'] = env.FORUM.value
+            g.varible['forum'] = self.sql.listmessage(title,per_page,offset)
+            return self.render(**g.varible)
+        @app.get("/"+env.FORUMS.value)
+        def forum():
+            page = request.args.get('page', default=1, type=int)
+            per_page = 10
+            offset = (page - 1) * per_page
+            g.varible['page'] = env.FORUMS.value
+            g.varible['forums']=self.sql.listforum(per_page,offset)
             return self.render(**g.varible)
         @app.errorhandler(404)
         def page_not_found(e):
@@ -159,12 +184,40 @@ class authHandler(web):
         def logout():
             session.clear()
             return redirect("/")
-        @app.route("/membre",methods=["POST","GET"])
+        @app.route("/"+env.ACCOUNT.value,methods=["POST","GET"])
         def membre():
             if not session.get(env.USER.value):
                 return redirect("/")
-            g.varible['page'] = env.LOGIN.value
+            g.varible['page'] = env.ACCOUNT.value
             return self.render(**g.varible)
+        @app.post("/forum/<title>/")
+        def postforum(title):
+            if not session.get(env.USER.value):
+                return redirect("")
+            self.sendforum()
+            page = request.args.get('page', default=1, type=int)
+            per_page = 10
+            offset = (page - 1) * per_page
+            g.varible['page'] = env.FORUM.value
+            g.varible['forum'] = self.sql.listmessage(title,per_page,offset)
+            return self.render(**g.varible)
+        @app.post("/"+env.FORUMS.value)
+        def forums():
+            if not session.get(env.USER.value):
+                return redirect("")
+            self.sendforum()
+            page = request.args.get('page', default=1, type=int)
+            per_page = 10
+            offset = (page - 1) * per_page
+            g.varible['page'] = env.FORUMS.value
+            g.varible['forums']=self.sql.listforum(per_page,offset)
+            return self.render(**g.varible)
+    def sendforum(self):
+        if request.form.get("submit"):
+            title = request.form.get(env.FORUMTITRE.value)
+            message = request.form.get(env.FORUMMESSAGE.value)
+            if title and message:
+                self.sql.addforum(title,message)
 if __name__ == '__main__':
     app = Flask(__name__)
     app.secret_key  = os.urandom(24)
@@ -174,9 +227,8 @@ if __name__ == '__main__':
             if(issubclass(value,web)):
                 if value.__name__ != "web":
                     value(app)
-
     args = {
-        'port':8080,  #comme ameloration je peut utlise os.getenv('port') mais il faut charger le fichier lib python-dotenv la meme chose pour les autre
+        'port':8080,
         'debug':True,
         'host':"0.0.0.0"
     }

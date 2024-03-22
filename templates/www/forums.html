@@ -1,0 +1,8 @@
+<ul>
+    {% for forum in forums %}
+        <li><a href="/forum/{{ forum[env['FORUMTITRE']] }}/">{{ forum[env['FORUMTITRE']] }}</a></li>
+    {% endfor %}
+</ul>
+{% if session %}
+    {% include 'www/create.html' %}
+{% endif %}

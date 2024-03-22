@@ -3,6 +3,9 @@
     <a href="{{ env['LOGOUT']}}">
         logout
     </a>
+    <a href="/{{env['FORUMS']}}">
+        forums
+    </a>
 </header>
 {% else %}
 <header>
@@ -12,8 +15,8 @@
     <a href="/{{ env['REGISTER'] }}">
         register
     </a>
-    <a>
-        wiki
+    <a href="/{{env['FORUMS']}}">
+        forums
     </a>
 </header>
 {% endif %}
