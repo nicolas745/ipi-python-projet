@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 from flask import Flask, render_template , request, session, g , redirect
 import html
 from werkzeug.security import check_password_hash, generate_password_hash
@@ -7,6 +7,7 @@ from enum import Enum
 import os
 import time
 import inspect
+import datetime
 from threading import local
 class env(Enum):
     USER="pseudo"
@@ -86,10 +87,13 @@ class sql:
         con = self._get_conn()
         cursor = con.cursor()
         cursor.execute(f'SELECT forum.*, user.{env.USER.value}  FROM forum JOIN user ON forum.{env.FORUMIDUSER.value} = user.id WHERE {env.FORUMTITRE.value}=? ORDER BY id ASC LIMIT ? OFFSET ?', (title,per_page,offset))
-        message = cursor.fetchall()
+        rows = cursor.fetchall()
         cursor.close()
         con.close()
-        return message
+        messages = [dict(row) for row in rows]
+        for message in messages:
+            message[env.FORUMTIME.value] = datetime.datetime.utcfromtimestamp(float(message[env.FORUMTIME.value]))
+        return messages
         
 class web():
     def __init__(self,app:Flask) -> None:
