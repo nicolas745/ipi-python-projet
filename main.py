@@ -15,6 +15,7 @@ class env(Enum):
     FORUMTIME="time"
     PASSWD="passwd"
     INDEX="index.html"
+    ACCOUNT="account.html"
     LOGOUT="logout.html"
     WIKI="wiki.html"
     REGISTER="register.html"
@@ -57,11 +58,12 @@ class sql:
         cursor.execute(f"""
                 SELECT * 
                 FROM user 
-                WHERE `pseudo`='a';
-            """)
+                WHERE `{env.USER.value}`=?;
+            """,(user,))
         res=cursor.fetchone()
-        print()
         cursor.close()
+        if(not res):
+            return None
         return  res[env.PASSWD.value]
 
     def adduser(self, user, passwd):
@@ -77,11 +79,11 @@ class web():
     def __init__(self,app:Flask) -> None:
         @app.before_request
         def before_request():
-            self.before_request()
+            return self.before_request()
     def before_request(self):
         g.varible = {
-                "message":{},
-                "page":env.ERROR404.value
+            "message":{},
+            "page":env.ERROR404.value
             }
     def render(self,**args):
         args['env'] = {}
@@ -94,20 +96,27 @@ class UnauthPageHandler(web):
         self.sql = sql("database.db")
         @app.get("/")
         def index():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.INDEX.value
             return self.render(**g.varible)
-        
         @app.post("/")
         def connect():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.INDEX.value
             return self.render(**g.varible)
         
         @app.get("/"+env.REGISTER.value)
         def getregister():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.REGISTER.value
             return self.render(**g.varible)
         @app.post("/"+env.REGISTER.value)
         def postregister():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.REGISTER.value
             if request.form.get("submit"):
                 user = request.form.get(env.USER.value)
@@ -121,31 +130,39 @@ class UnauthPageHandler(web):
             return self.render(**g.varible)
         @app.get("/"+env.LOGIN.value)
         def getlogin():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.LOGIN.value
             return self.render(**g.varible)
         @app.post("/"+env.LOGIN.value)
         def postlogin():
+            if session.get(env.USER.value):
+                return redirect("/"+env.ACCOUNT.value)
             g.varible['page'] = env.LOGIN.value
             if request.form.get("submit"):
                 user = request.form.get(env.USER.value)
                 passwd = request.form.get(env.PASSWD.value)
                 if user and request.form.get(env.PASSWD.value):
                     passwd_hash=self.sql.getpasswd(user)
-                    if check_password_hash(passwd_hash, passwd):
-                        session[env.USER.value] = user
-                        return redirect("/membre")
+                    if(passwd_hash):
+                        if check_password_hash(passwd_hash, passwd):
+                            session[env.USER.value] = user
+                            return redirect("/membre")
             return self.render(**g.varible)
         @app.errorhandler(404)
         def page_not_found(e):
             return self.render(**g.varible), 404
 class authHandler(web):
     def __init__(self, app: Flask) -> None: 
+        super().__init__(app)
         @app.get("/"+env.LOGOUT.value)
         def logout():
             session.clear()
             return redirect("/")
-        @app.get("/membre")
+        @app.route("/membre",methods=["POST","GET"])
         def membre():
+            if not session.get(env.USER.value):
+                return redirect("/")
             g.varible['page'] = env.LOGIN.value
             return self.render(**g.varible)
 if __name__ == '__main__':
@@ -155,7 +172,8 @@ if __name__ == '__main__':
     for key, value in global_data.items():
         if inspect.isclass(value):
             if(issubclass(value,web)):
-                value(app)
+                if value.__name__ != "web":
+                    value(app)
 
     args = {
         'port':8080,  #comme ameloration je peut utlise os.getenv('port') mais il faut charger le fichier lib python-dotenv la meme chose pour les autre
