@@ -18,6 +18,14 @@
     </tr>
     {% endfor %}
 </table>
+{% set page = args.get('page', 1)|int %}  <!-- Obtient la valeur de 'page' avec une valeur par défaut de 0 -->
+{% if page > 1 %}
+    <a href="?page={{ page|int - 1 }}">Page {{ page|int - 1 }}</a>
+{% endif %}
+<p>Page {{ page|int }}</p>
+<a href="?page={{ page|int + 1 }}">Page {{ page|int + 1 }}</a>
+
+
 {% if session %}
-    {% include 'www/message.html' %}
+    {% include 'www/create.html' %}
 {% endif %}

@@ -85,7 +85,7 @@ class sql:
     def listmessage(self,title,per_page,offset):
         con = self._get_conn()
         cursor = con.cursor()
-        cursor.execute(f'SELECT forum.*, user.{env.USER.value}  FROM forum JOIN user ON forum.{env.FORUMIDUSER.value} = user.id WHERE {env.FORUMTITRE.value}=? ORDER BY id DESC LIMIT ? OFFSET ?', (title,per_page,offset))
+        cursor.execute(f'SELECT forum.*, user.{env.USER.value}  FROM forum JOIN user ON forum.{env.FORUMIDUSER.value} = user.id WHERE {env.FORUMTITRE.value}=? ORDER BY id ASC LIMIT ? OFFSET ?', (title,per_page,offset))
         message = cursor.fetchall()
         cursor.close()
         con.close()
@@ -100,7 +100,8 @@ class web():
     def before_request(self):
         g.varible = {
             "message":{},
-            "page":env.ERROR404.value
+            "page":env.ERROR404.value,
+            "args": request.args.to_dict()
             }
     def render(self,**args):
         args['env'] = {}
@@ -194,7 +195,7 @@ class authHandler(web):
         def postforum(title):
             if not session.get(env.USER.value):
                 return redirect("")
-            self.sendforum()
+            self.sendforum(title)
             page = request.args.get('page', default=1, type=int)
             per_page = 10
             offset = (page - 1) * per_page
@@ -205,16 +206,15 @@ class authHandler(web):
         def forums():
             if not session.get(env.USER.value):
                 return redirect("")
-            self.sendforum()
+            self.sendforum(request.form.get(env.FORUMTITRE.value))
             page = request.args.get('page', default=1, type=int)
             per_page = 10
             offset = (page - 1) * per_page
             g.varible['page'] = env.FORUMS.value
             g.varible['forums']=self.sql.listforum(per_page,offset)
             return self.render(**g.varible)
-    def sendforum(self):
+    def sendforum(self,title):
         if request.form.get("submit"):
-            title = request.form.get(env.FORUMTITRE.value)
             message = request.form.get(env.FORUMMESSAGE.value)
             if title and message:
                 self.sql.addforum(title,message)
